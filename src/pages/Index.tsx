@@ -162,18 +162,13 @@ const Index = () => {
                     </h2>
                     
                     {!isRegistered && (
-                      <div className="relative">
-                        <div className="absolute left-1/2 -translate-x-1/2 -ml-16 -top-24 text-7xl animate-float" style={{ transform: 'translateX(-50%) translateX(-4rem) rotate(135deg)' }}>
-                          👉
-                        </div>
-                        <div className="animate-pulse-glow">
-                          <Button 
-                            onClick={() => setActiveTab('auth')}
-                            className="minecraft-btn text-lg md:text-2xl !py-6 !px-12 bg-primary hover:bg-primary/90"
-                          >
-                            🎮 РЕГИСТРАЦИЯ
-                          </Button>
-                        </div>
+                      <div className="animate-pulse-glow">
+                        <Button 
+                          onClick={() => setActiveTab('auth')}
+                          className="minecraft-btn text-lg md:text-2xl !py-6 !px-12 bg-primary hover:bg-primary/90"
+                        >
+                          🎮 РЕГИСТРАЦИЯ
+                        </Button>
                       </div>
                     )}
                     
