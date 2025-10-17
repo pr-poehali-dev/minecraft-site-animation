@@ -6,11 +6,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import Icon from '@/components/ui/icon';
 
-type Tab = 'home' | 'interesting' | 'auth' | 'support' | 'community';
+type Tab = 'home' | 'interesting' | 'auth' | 'support' | 'community' | 'admin';
 
 interface User {
   username: string;
   email: string;
+  isAdmin?: boolean;
 }
 
 interface Comment {
@@ -20,12 +21,24 @@ interface Comment {
   timestamp: string;
 }
 
+interface OnlineUser {
+  id: string;
+  username: string;
+  lastSeen: number;
+  isAdmin?: boolean;
+}
+
+const ADMIN_USERNAME = 'ilyadrak7244';
+const ADMIN_PASSWORD = '5555';
+
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [isRegistered, setIsRegistered] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isLogin, setIsLogin] = useState(false);
   const { toast } = useToast();
+  const [onlineCount, setOnlineCount] = useState(1);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
 
   const [authForm, setAuthForm] = useState({
     username: '',
@@ -45,10 +58,56 @@ const Index = () => {
       setUser(JSON.parse(savedUser));
       setIsRegistered(true);
     }
-  }, []);
+
+    const sessionId = localStorage.getItem('sessionId') || Math.random().toString(36);
+    localStorage.setItem('sessionId', sessionId);
+
+    const updateOnlineStatus = () => {
+      const users = JSON.parse(localStorage.getItem('onlineUsers') || '[]');
+      const now = Date.now();
+      
+      const activeUsers = users.filter((u: OnlineUser) => now - u.lastSeen < 60000);
+      
+      const currentUserIndex = activeUsers.findIndex((u: OnlineUser) => u.id === sessionId);
+      if (currentUserIndex >= 0) {
+        activeUsers[currentUserIndex].lastSeen = now;
+        if (savedUser) {
+          const userData = JSON.parse(savedUser);
+          activeUsers[currentUserIndex].username = userData.username;
+          activeUsers[currentUserIndex].isAdmin = userData.isAdmin || false;
+        }
+      } else {
+        activeUsers.push({
+          id: sessionId,
+          username: savedUser ? JSON.parse(savedUser).username : 'Гость',
+          lastSeen: now,
+          isAdmin: savedUser ? JSON.parse(savedUser).isAdmin || false : false
+        });
+      }
+      
+      localStorage.setItem('onlineUsers', JSON.stringify(activeUsers));
+      setOnlineUsers(activeUsers);
+      setOnlineCount(activeUsers.length);
+    };
+
+    updateOnlineStatus();
+    const interval = setInterval(updateOnlineStatus, 5000);
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   const handleAuth = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (authForm.username === ADMIN_USERNAME && authForm.password === ADMIN_PASSWORD) {
+      const adminUser = { username: ADMIN_USERNAME, email: 'admin@minecraft.com', isAdmin: true };
+      localStorage.setItem('minecraftUser', JSON.stringify(adminUser));
+      setUser(adminUser);
+      setIsRegistered(true);
+      setActiveTab('admin');
+      toast({ title: '🔐 Админ вход выполнен!', description: 'Добро пожаловать в панель управления' });
+      return;
+    }
     
     if (isLogin) {
       const savedUser = localStorage.getItem('minecraftUser');
@@ -106,7 +165,21 @@ const Index = () => {
     localStorage.removeItem('minecraftUser');
     setUser(null);
     setIsRegistered(false);
+    setActiveTab('home');
     toast({ title: '👋 Выход выполнен' });
+  };
+
+  const handleDeleteComment = (commentId: number) => {
+    setComments(comments.filter(c => c.id !== commentId));
+    toast({ title: '🗑️ Комментарий удалён' });
+  };
+
+  const handleKickUser = (userId: string) => {
+    const users = JSON.parse(localStorage.getItem('onlineUsers') || '[]');
+    const updatedUsers = users.filter((u: OnlineUser) => u.id !== userId);
+    localStorage.setItem('onlineUsers', JSON.stringify(updatedUsers));
+    setOnlineUsers(updatedUsers);
+    toast({ title: '⚠️ Пользователь отключен' });
   };
 
   return (
@@ -115,12 +188,22 @@ const Index = () => {
         <nav className="bg-card/90 backdrop-blur-md border-b-4 border-border p-4 sticky top-0 z-50">
           <div className="container mx-auto">
             <div className="flex items-center justify-between mb-4">
-              <h1 className="text-2xl md:text-4xl pixel-text text-primary flex items-center gap-2 drop-shadow-lg">
-                <span className="animate-pulse">⛏️</span> MINECRAFT PORTAL
-              </h1>
+              <div>
+                <h1 className="text-2xl md:text-4xl pixel-text text-primary flex items-center gap-2 drop-shadow-lg">
+                  <span className="animate-pulse">⛏️</span> MINECRAFT PORTAL
+                </h1>
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs md:text-sm text-muted-foreground pixel-text">
+                    Онлайн: {onlineCount} чел.
+                  </span>
+                </div>
+              </div>
               {user && (
                 <div className="flex items-center gap-3">
-                  <span className="text-xs md:text-sm pixel-text text-primary drop-shadow-md">👤 {user.username}</span>
+                  <span className="text-xs md:text-sm pixel-text text-primary drop-shadow-md">
+                    {user.isAdmin ? '👑' : '👤'} {user.username}
+                  </span>
                   <button onClick={handleLogout} className="text-xs minecraft-btn !py-2 !px-4 bg-destructive">
                     Выход
                   </button>
@@ -133,7 +216,8 @@ const Index = () => {
                 { id: 'interesting' as Tab, label: '⭐ Интересное' },
                 { id: 'auth' as Tab, label: '🔐 Вход/Регистрация' },
                 { id: 'support' as Tab, label: '💬 Поддержка' },
-                { id: 'community' as Tab, label: '👥 Сообщество' }
+                { id: 'community' as Tab, label: '👥 Сообщество' },
+                ...(user?.isAdmin ? [{ id: 'admin' as Tab, label: '👑 Админ-панель' }] : [])
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -172,7 +256,7 @@ const Index = () => {
                       </div>
                     )}
                     
-                    {isRegistered && (
+                    {isRegistered && !user?.isAdmin && (
                       <div className="space-y-4 animate-fade-in">
                         <p className="text-primary pixel-text text-xl drop-shadow-md">
                           ✅ Вы зарегистрированы как {user?.username}!
@@ -182,6 +266,20 @@ const Index = () => {
                           className="minecraft-btn text-lg md:text-2xl !py-6 !px-12 bg-accent hover:bg-accent/90"
                         >
                           🚀 ПЕРЕЙТИ К TLAUNCHER
+                        </Button>
+                      </div>
+                    )}
+
+                    {user?.isAdmin && (
+                      <div className="space-y-4 animate-fade-in">
+                        <p className="text-accent pixel-text text-xl drop-shadow-md">
+                          👑 Добро пожаловать, Администратор!
+                        </p>
+                        <Button 
+                          onClick={() => setActiveTab('admin')}
+                          className="minecraft-btn text-lg md:text-2xl !py-6 !px-12 bg-accent hover:bg-accent/90"
+                        >
+                          ⚙️ ОТКРЫТЬ ПАНЕЛЬ УПРАВЛЕНИЯ
                         </Button>
                       </div>
                     )}
@@ -271,6 +369,20 @@ const Index = () => {
                           setIsLogin(true);
                         }}
                         placeholder="Steve123"
+                        className="bg-input/80 border-2 border-border focus:border-primary transition-colors"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-2 text-sm font-bold text-card-foreground">Пароль</label>
+                      <Input
+                        type="password"
+                        value={authForm.password}
+                        onChange={(e) => {
+                          setAuthForm({ ...authForm, password: e.target.value });
+                          setIsLogin(true);
+                        }}
+                        placeholder="••••••••"
                         className="bg-input/80 border-2 border-border focus:border-primary transition-colors"
                         required
                       />
@@ -418,6 +530,90 @@ const Index = () => {
                       <p className="text-card-foreground pl-7">{comment.text}</p>
                     </div>
                   ))}
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {activeTab === 'admin' && user?.isAdmin && (
+            <div className="space-y-6 animate-fade-in">
+              <Card className="minecraft-card bg-gradient-to-br from-accent/20 to-card/80 backdrop-blur-sm border-4 border-accent">
+                <h2 className="text-3xl font-bold mb-6 pixel-text text-accent flex items-center gap-3">
+                  <Icon name="Crown" className="w-10 h-10" /> АДМИН-ПАНЕЛЬ
+                </h2>
+                
+                <div className="grid md:grid-cols-2 gap-6 mb-8">
+                  <div className="bg-primary/20 p-6 border-2 border-primary">
+                    <h3 className="font-bold text-2xl mb-2 text-primary flex items-center gap-2">
+                      <Icon name="Users" className="w-7 h-7" />
+                      {onlineCount}
+                    </h3>
+                    <p className="text-sm text-card-foreground">Пользователей онлайн</p>
+                  </div>
+                  <div className="bg-secondary/20 p-6 border-2 border-secondary">
+                    <h3 className="font-bold text-2xl mb-2 text-secondary flex items-center gap-2">
+                      <Icon name="MessageSquare" className="w-7 h-7" />
+                      {comments.length}
+                    </h3>
+                    <p className="text-sm text-card-foreground">Всего сообщений</p>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="bg-muted/50 p-6 border-2 border-border">
+                    <h3 className="font-bold text-xl mb-4 text-primary flex items-center gap-2">
+                      <Icon name="Users" className="w-6 h-6" /> Пользователи онлайн
+                    </h3>
+                    <div className="space-y-3">
+                      {onlineUsers.map((onlineUser) => (
+                        <div key={onlineUser.id} className="bg-card/50 p-4 border-2 border-border flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className="font-bold text-card-foreground">
+                              {onlineUser.isAdmin && '👑 '}
+                              {onlineUser.username}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              ID: {onlineUser.id.slice(0, 8)}
+                            </span>
+                          </div>
+                          {!onlineUser.isAdmin && (
+                            <Button
+                              onClick={() => handleKickUser(onlineUser.id)}
+                              className="minecraft-btn !py-1 !px-3 text-xs bg-destructive"
+                            >
+                              <Icon name="UserX" className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-muted/50 p-6 border-2 border-border">
+                    <h3 className="font-bold text-xl mb-4 text-primary flex items-center gap-2">
+                      <Icon name="MessageSquare" className="w-6 h-6" /> Управление сообщениями
+                    </h3>
+                    <div className="space-y-3">
+                      {comments.map((comment) => (
+                        <div key={comment.id} className="bg-card/50 p-4 border-2 border-border">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <span className="font-bold text-primary">{comment.username}</span>
+                              <span className="text-xs text-muted-foreground ml-3">{comment.timestamp}</span>
+                            </div>
+                            <Button
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="minecraft-btn !py-1 !px-3 text-xs bg-destructive"
+                            >
+                              <Icon name="Trash2" className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <p className="text-sm text-card-foreground">{comment.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </Card>
             </div>
