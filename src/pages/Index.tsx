@@ -157,26 +157,23 @@ const Index = () => {
                   <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-blue-500/10"></div>
                   
                   <div className="relative z-10 text-center space-y-8 p-8">
-                    {!isRegistered && (
-                      <div className="relative inline-block">
-                        <div className="absolute -left-20 top-1/2 -translate-y-1/2 text-7xl animate-float">
-                          👉
-                        </div>
-                      </div>
-                    )}
-                    
                     <h2 className="text-3xl md:text-5xl pixel-text text-primary drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]">
                       ДОБРО ПОЖАЛОВАТЬ!
                     </h2>
                     
                     {!isRegistered && (
-                      <div className="animate-pulse-glow">
-                        <Button 
-                          onClick={() => setActiveTab('auth')}
-                          className="minecraft-btn text-lg md:text-2xl !py-6 !px-12 bg-primary hover:bg-primary/90"
-                        >
-                          🎮 РЕГИСТРАЦИЯ
-                        </Button>
+                      <div className="relative">
+                        <div className="absolute left-1/2 -translate-x-1/2 -top-16 text-7xl animate-float rotate-90">
+                          👉
+                        </div>
+                        <div className="animate-pulse-glow">
+                          <Button 
+                            onClick={() => setActiveTab('auth')}
+                            className="minecraft-btn text-lg md:text-2xl !py-6 !px-12 bg-primary hover:bg-primary/90"
+                          >
+                            🎮 РЕГИСТРАЦИЯ
+                          </Button>
+                        </div>
                       </div>
                     )}
                     
