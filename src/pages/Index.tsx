@@ -163,7 +163,7 @@ const Index = () => {
                     
                     {!isRegistered && (
                       <div className="relative">
-                        <div className="absolute left-1/2 -translate-x-1/2 -top-16 text-7xl animate-float rotate-90">
+                        <div className="absolute left-1/2 -translate-x-1/2 -ml-16 -top-24 text-7xl animate-float" style={{ transform: 'translateX(-50%) translateX(-4rem) rotate(135deg)' }}>
                           👉
                         </div>
                         <div className="animate-pulse-glow">
