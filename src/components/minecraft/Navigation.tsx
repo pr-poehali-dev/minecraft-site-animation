@@ -43,6 +43,7 @@ export default function Navigation({ activeTab, setActiveTab, user, onlineCount,
             { id: 'auth' as Tab, label: '🔐 Вход/Регистрация' },
             { id: 'support' as Tab, label: '💬 Поддержка' },
             { id: 'community' as Tab, label: '👥 Сообщество' },
+            ...(user && !user.isAdmin ? [{ id: 'friends' as Tab, label: '👫 Друзья' }] : []),
             ...(user?.isAdmin ? [{ id: 'admin' as Tab, label: '👑 Админ-панель' }] : [])
           ].map((tab) => (
             <button

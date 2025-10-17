@@ -7,8 +7,9 @@ import AuthTab from '@/components/minecraft/AuthTab';
 import SupportTab from '@/components/minecraft/SupportTab';
 import CommunityTab from '@/components/minecraft/CommunityTab';
 import AdminTab from '@/components/minecraft/AdminTab';
+import FriendsTab from '@/components/minecraft/FriendsTab';
 import Footer from '@/components/minecraft/Footer';
-import { Tab, User, Comment, OnlineUser, ADMIN_USERNAME, ADMIN_PASSWORD } from '@/components/minecraft/types';
+import { Tab, User, Comment, OnlineUser, PrivateMessage, FriendRequest, SiteSettings, ADMIN_USERNAME, ADMIN_PASSWORD } from '@/components/minecraft/types';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<Tab>('home');
@@ -20,6 +21,15 @@ const Index = () => {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [bannedUsers, setBannedUsers] = useState<string[]>([]);
   const [mutedUsers, setMutedUsers] = useState<string[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>({
+    siteName: 'MINECRAFT PORTAL',
+    welcomeMessage: 'ДОБРО ПОЖАЛОВАТЬ!',
+    maintenanceMode: false,
+    allowRegistration: true
+  });
 
   const [authForm, setAuthForm] = useState({
     username: '',
@@ -37,8 +47,17 @@ const Index = () => {
     const savedUser = localStorage.getItem('minecraftUser');
     const banned = JSON.parse(localStorage.getItem('bannedUsers') || '[]');
     const muted = JSON.parse(localStorage.getItem('mutedUsers') || '[]');
+    const users = JSON.parse(localStorage.getItem('allUsers') || '[]');
+    const messages = JSON.parse(localStorage.getItem('privateMessages') || '[]');
+    const requests = JSON.parse(localStorage.getItem('friendRequests') || '[]');
+    const settings = JSON.parse(localStorage.getItem('siteSettings') || 'null');
+    
     setBannedUsers(banned);
     setMutedUsers(muted);
+    setAllUsers(users);
+    setPrivateMessages(messages);
+    setFriendRequests(requests);
+    if (settings) setSiteSettings(settings);
 
     if (savedUser) {
       const userData = JSON.parse(savedUser);
@@ -91,8 +110,18 @@ const Index = () => {
   const handleAuth = (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!siteSettings.allowRegistration && !isLogin) {
+      toast({ title: '❌ Регистрация закрыта', description: 'Администратор закрыл регистрацию', variant: 'destructive' });
+      return;
+    }
+
+    if (siteSettings.maintenanceMode) {
+      toast({ title: '⚠️ Технические работы', description: 'Сайт на обслуживании', variant: 'destructive' });
+      return;
+    }
+    
     if (authForm.username === ADMIN_USERNAME && authForm.password === ADMIN_PASSWORD) {
-      const adminUser = { username: ADMIN_USERNAME, email: 'admin@minecraft.com', isAdmin: true };
+      const adminUser = { username: ADMIN_USERNAME, email: 'admin@minecraft.com', isAdmin: true, friends: [] };
       localStorage.setItem('minecraftUser', JSON.stringify(adminUser));
       setUser(adminUser);
       setIsRegistered(true);
@@ -102,23 +131,24 @@ const Index = () => {
     }
     
     if (isLogin) {
-      const savedUser = localStorage.getItem('minecraftUser');
-      if (savedUser) {
-        const userData = JSON.parse(savedUser);
-        if (userData.username === authForm.username) {
-          setUser(userData);
-          setIsRegistered(true);
-          toast({ title: '✅ Вход выполнен!', description: `Добро пожаловать обратно, ${authForm.username}!` });
-          setTimeout(() => {
-            window.open('https://tlauncher.org', '_blank');
-          }, 1500);
-        } else {
-          toast({ title: '❌ Ошибка', description: 'Неверные данные для входа', variant: 'destructive' });
-        }
+      const foundUser = allUsers.find(u => u.username === authForm.username);
+      if (foundUser) {
+        setUser(foundUser);
+        setIsRegistered(true);
+        localStorage.setItem('minecraftUser', JSON.stringify(foundUser));
+        toast({ title: '✅ Вход выполнен!', description: `Добро пожаловать обратно, ${authForm.username}!` });
+        setTimeout(() => {
+          window.open('https://tlauncher.org', '_blank');
+        }, 1500);
+      } else {
+        toast({ title: '❌ Ошибка', description: 'Пользователь не найден', variant: 'destructive' });
       }
     } else {
       if (authForm.username && authForm.email && authForm.password) {
-        const newUser = { username: authForm.username, email: authForm.email };
+        const newUser = { username: authForm.username, email: authForm.email, friends: [] };
+        const updatedUsers = [...allUsers, newUser];
+        setAllUsers(updatedUsers);
+        localStorage.setItem('allUsers', JSON.stringify(updatedUsers));
         localStorage.setItem('minecraftUser', JSON.stringify(newUser));
         setUser(newUser);
         setIsRegistered(true);
@@ -206,6 +236,104 @@ const Index = () => {
     toast({ title: '🔊 Мут снят!', description: username });
   };
 
+  const handleDeleteUser = (username: string) => {
+    const updated = allUsers.filter(u => u.username !== username);
+    setAllUsers(updated);
+    localStorage.setItem('allUsers', JSON.stringify(updated));
+    toast({ title: '🗑️ Пользователь удалён!', description: username });
+  };
+
+  const handleSendFriendRequest = (toUsername: string) => {
+    if (!user) return;
+    const newRequest: FriendRequest = {
+      id: friendRequests.length + 1,
+      from: user.username,
+      to: toUsername,
+      timestamp: new Date().toLocaleString()
+    };
+    const updated = [...friendRequests, newRequest];
+    setFriendRequests(updated);
+    localStorage.setItem('friendRequests', JSON.stringify(updated));
+    toast({ title: '📤 Заявка отправлена!', description: toUsername });
+  };
+
+  const handleAcceptFriendRequest = (requestId: number) => {
+    if (!user) return;
+    const request = friendRequests.find(r => r.id === requestId);
+    if (!request) return;
+
+    const updatedUser = { ...user, friends: [...(user.friends || []), request.from] };
+    const senderUser = allUsers.find(u => u.username === request.from);
+    if (senderUser) {
+      senderUser.friends = [...(senderUser.friends || []), user.username];
+      const updatedUsers = allUsers.map(u => u.username === senderUser.username ? senderUser : u);
+      updatedUsers.forEach(u => {
+        if (u.username === user.username) Object.assign(u, updatedUser);
+      });
+      setAllUsers(updatedUsers);
+      localStorage.setItem('allUsers', JSON.stringify(updatedUsers));
+    }
+
+    setUser(updatedUser);
+    localStorage.setItem('minecraftUser', JSON.stringify(updatedUser));
+    
+    const updated = friendRequests.filter(r => r.id !== requestId);
+    setFriendRequests(updated);
+    localStorage.setItem('friendRequests', JSON.stringify(updated));
+    toast({ title: '✅ Друг добавлен!', description: request.from });
+  };
+
+  const handleRejectFriendRequest = (requestId: number) => {
+    const updated = friendRequests.filter(r => r.id !== requestId);
+    setFriendRequests(updated);
+    localStorage.setItem('friendRequests', JSON.stringify(updated));
+    toast({ title: '❌ Заявка отклонена' });
+  };
+
+  const handleSendMessage = (to: string, text: string) => {
+    if (!user) return;
+    const newMessage: PrivateMessage = {
+      id: privateMessages.length + 1,
+      from: user.username,
+      to,
+      text,
+      timestamp: new Date().toLocaleString(),
+      read: false
+    };
+    const updated = [...privateMessages, newMessage];
+    setPrivateMessages(updated);
+    localStorage.setItem('privateMessages', JSON.stringify(updated));
+    toast({ title: '✅ Сообщение отправлено!' });
+  };
+
+  const handleRemoveFriend = (friendName: string) => {
+    if (!user) return;
+    const updatedUser = { ...user, friends: (user.friends || []).filter(f => f !== friendName) };
+    setUser(updatedUser);
+    localStorage.setItem('minecraftUser', JSON.stringify(updatedUser));
+    
+    const updatedUsers = allUsers.map(u => 
+      u.username === user.username 
+        ? updatedUser 
+        : u.username === friendName 
+          ? { ...u, friends: (u.friends || []).filter(f => f !== user.username) }
+          : u
+    );
+    setAllUsers(updatedUsers);
+    localStorage.setItem('allUsers', JSON.stringify(updatedUsers));
+    toast({ title: '🗑️ Друг удалён', description: friendName });
+  };
+
+  const handleUpdateSettings = (settings: SiteSettings) => {
+    setSiteSettings(settings);
+    localStorage.setItem('siteSettings', JSON.stringify(settings));
+    toast({ title: '✅ Настройки сохранены!' });
+  };
+
+  const handleAddNews = (title: string, text: string) => {
+    toast({ title: '✅ Новость добавлена!', description: 'Новость опубликована на главной' });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900">
       <div className="min-h-screen bg-black/20 backdrop-blur-[1px]">
@@ -248,6 +376,20 @@ const Index = () => {
             />
           )}
 
+          {activeTab === 'friends' && user && !user.isAdmin && (
+            <FriendsTab
+              user={user}
+              allUsers={allUsers}
+              friendRequests={friendRequests}
+              privateMessages={privateMessages}
+              onSendFriendRequest={handleSendFriendRequest}
+              onAcceptFriendRequest={handleAcceptFriendRequest}
+              onRejectFriendRequest={handleRejectFriendRequest}
+              onSendMessage={handleSendMessage}
+              onRemoveFriend={handleRemoveFriend}
+            />
+          )}
+
           {activeTab === 'admin' && user?.isAdmin && (
             <AdminTab
               onlineCount={onlineCount}
@@ -255,12 +397,17 @@ const Index = () => {
               onlineUsers={onlineUsers}
               bannedUsers={bannedUsers}
               mutedUsers={mutedUsers}
+              allUsers={allUsers}
+              siteSettings={siteSettings}
               handleKickUser={handleKickUser}
               handleBanUser={handleBanUser}
               handleUnbanUser={handleUnbanUser}
               handleMuteUser={handleMuteUser}
               handleUnmuteUser={handleUnmuteUser}
               handleDeleteComment={handleDeleteComment}
+              handleDeleteUser={handleDeleteUser}
+              handleUpdateSettings={handleUpdateSettings}
+              handleAddNews={handleAddNews}
             />
           )}
         </main>
