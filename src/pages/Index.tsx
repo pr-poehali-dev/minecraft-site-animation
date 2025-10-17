@@ -26,6 +26,8 @@ interface OnlineUser {
   username: string;
   lastSeen: number;
   isAdmin?: boolean;
+  isBanned?: boolean;
+  isMuted?: boolean;
 }
 
 const ADMIN_USERNAME = 'ilyadrak7244';
@@ -39,6 +41,8 @@ const Index = () => {
   const { toast } = useToast();
   const [onlineCount, setOnlineCount] = useState(1);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [bannedUsers, setBannedUsers] = useState<string[]>([]);
+  const [mutedUsers, setMutedUsers] = useState<string[]>([]);
 
   const [authForm, setAuthForm] = useState({
     username: '',
@@ -54,8 +58,19 @@ const Index = () => {
 
   useEffect(() => {
     const savedUser = localStorage.getItem('minecraftUser');
+    const banned = JSON.parse(localStorage.getItem('bannedUsers') || '[]');
+    const muted = JSON.parse(localStorage.getItem('mutedUsers') || '[]');
+    setBannedUsers(banned);
+    setMutedUsers(muted);
+
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      const userData = JSON.parse(savedUser);
+      if (banned.includes(userData.username) && !userData.isAdmin) {
+        toast({ title: '🚫 Вы забанены!', description: 'Доступ к сайту запрещён', variant: 'destructive' });
+        localStorage.removeItem('minecraftUser');
+        return;
+      }
+      setUser(userData);
       setIsRegistered(true);
     }
 
@@ -148,6 +163,10 @@ const Index = () => {
       setActiveTab('auth');
       return;
     }
+    if (mutedUsers.includes(user.username)) {
+      toast({ title: '🔇 Вы в муте!', description: 'Вы не можете отправлять сообщения', variant: 'destructive' });
+      return;
+    }
     if (newComment.trim()) {
       const comment: Comment = {
         id: comments.length + 1,
@@ -180,6 +199,34 @@ const Index = () => {
     localStorage.setItem('onlineUsers', JSON.stringify(updatedUsers));
     setOnlineUsers(updatedUsers);
     toast({ title: '⚠️ Пользователь отключен' });
+  };
+
+  const handleBanUser = (username: string) => {
+    const banned = [...bannedUsers, username];
+    setBannedUsers(banned);
+    localStorage.setItem('bannedUsers', JSON.stringify(banned));
+    toast({ title: '🚫 Пользователь забанен!', description: username });
+  };
+
+  const handleUnbanUser = (username: string) => {
+    const banned = bannedUsers.filter(u => u !== username);
+    setBannedUsers(banned);
+    localStorage.setItem('bannedUsers', JSON.stringify(banned));
+    toast({ title: '✅ Бан снят!', description: username });
+  };
+
+  const handleMuteUser = (username: string) => {
+    const muted = [...mutedUsers, username];
+    setMutedUsers(muted);
+    localStorage.setItem('mutedUsers', JSON.stringify(muted));
+    toast({ title: '🔇 Пользователь замучен!', description: username });
+  };
+
+  const handleUnmuteUser = (username: string) => {
+    const muted = mutedUsers.filter(u => u !== username);
+    setMutedUsers(muted);
+    localStorage.setItem('mutedUsers', JSON.stringify(muted));
+    toast({ title: '🔊 Мут снят!', description: username });
   };
 
   return (
@@ -565,28 +612,72 @@ const Index = () => {
                       <Icon name="Users" className="w-6 h-6" /> Пользователи онлайн
                     </h3>
                     <div className="space-y-3">
-                      {onlineUsers.map((onlineUser) => (
-                        <div key={onlineUser.id} className="bg-card/50 p-4 border-2 border-border flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                            <span className="font-bold text-card-foreground">
-                              {onlineUser.isAdmin && '👑 '}
-                              {onlineUser.username}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              ID: {onlineUser.id.slice(0, 8)}
-                            </span>
+                      {onlineUsers.map((onlineUser) => {
+                        const isBanned = bannedUsers.includes(onlineUser.username);
+                        const isMuted = mutedUsers.includes(onlineUser.username);
+                        return (
+                        <div key={onlineUser.id} className="bg-card/50 p-4 border-2 border-border">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                              <span className="font-bold text-card-foreground">
+                                {onlineUser.isAdmin && '👑 '}
+                                {isBanned && '🚫 '}
+                                {isMuted && '🔇 '}
+                                {onlineUser.username}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                ID: {onlineUser.id.slice(0, 8)}
+                              </span>
+                            </div>
                           </div>
                           {!onlineUser.isAdmin && (
-                            <Button
-                              onClick={() => handleKickUser(onlineUser.id)}
-                              className="minecraft-btn !py-1 !px-3 text-xs bg-destructive"
-                            >
-                              <Icon name="UserX" className="w-4 h-4" />
-                            </Button>
+                            <div className="flex gap-2 flex-wrap">
+                              <Button
+                                onClick={() => handleKickUser(onlineUser.id)}
+                                className="minecraft-btn !py-1 !px-3 text-xs bg-destructive"
+                              >
+                                <Icon name="UserX" className="w-4 h-4 mr-1" />
+                                Кик
+                              </Button>
+                              {!isBanned ? (
+                                <Button
+                                  onClick={() => handleBanUser(onlineUser.username)}
+                                  className="minecraft-btn !py-1 !px-3 text-xs bg-destructive"
+                                >
+                                  <Icon name="Ban" className="w-4 h-4 mr-1" />
+                                  Бан
+                                </Button>
+                              ) : (
+                                <Button
+                                  onClick={() => handleUnbanUser(onlineUser.username)}
+                                  className="minecraft-btn !py-1 !px-3 text-xs bg-primary"
+                                >
+                                  <Icon name="Check" className="w-4 h-4 mr-1" />
+                                  Разбан
+                                </Button>
+                              )}
+                              {!isMuted ? (
+                                <Button
+                                  onClick={() => handleMuteUser(onlineUser.username)}
+                                  className="minecraft-btn !py-1 !px-3 text-xs bg-secondary"
+                                >
+                                  <Icon name="VolumeX" className="w-4 h-4 mr-1" />
+                                  Мут
+                                </Button>
+                              ) : (
+                                <Button
+                                  onClick={() => handleUnmuteUser(onlineUser.username)}
+                                  className="minecraft-btn !py-1 !px-3 text-xs bg-primary"
+                                >
+                                  <Icon name="Volume2" className="w-4 h-4 mr-1" />
+                                  Размут
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </div>
 
@@ -619,6 +710,20 @@ const Index = () => {
             </div>
           )}
         </main>
+
+        <footer className="bg-card/90 backdrop-blur-md border-t-4 border-border p-6 mt-12">
+          <div className="container mx-auto text-center space-y-3">
+            <p className="text-lg pixel-text text-primary">
+              Создатель: Илья Попов А.
+            </p>
+            <p className="text-sm pixel-text text-accent animate-pulse">
+              Лина лох!
+            </p>
+            <p className="text-xs text-muted-foreground">
+              © 2025 Minecraft Portal. Все права защищены.
+            </p>
+          </div>
+        </footer>
       </div>
     </div>
   );
